@@ -6,11 +6,13 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/dhowden/itl"
+	"github.com/kennygrant/sanitize"
 )
 
 func main() {
@@ -21,7 +23,7 @@ func main() {
 	check(err)
 
 	CopyPlaylists(library, []string{
-		"Machinae Supremacy",
+		// "Machinae Supremacy",
 		"_Pop",
 	})
 }
@@ -88,23 +90,42 @@ func CopyTrackToDestination(track itl.Track) {
 	src := TrackLocationToFilePath(track.Location)
 	_, srcFile := filepath.Split(src)
 	destRoot := filepath.Join("D:", "Mc", "files")
+
+	var albumArtistOrAtrist string
+	if track.AlbumArtist != "" {
+		albumArtistOrAtrist = track.AlbumArtist
+	} else {
+		albumArtistOrAtrist = track.Artist
+	}
+
 	destDir := filepath.Join(
 		destRoot,
-		track.Artist+" - "+track.Album,
+		albumArtistOrAtrist+"-"+track.Album,
 	)
 	err := os.MkdirAll(destDir, os.ModeDir)
 	check(err)
 	dest := filepath.Join(destDir, srcFile)
 	log.Println("Source:", src)
 	log.Println("Destination:", dest)
-	CopyFile(src, dest)
+	// CopyFile(src, dest)
+
+	binary, lookErr := exec.LookPath("qaac64")
+	check(lookErr)
+
+	args := []string{src, "-v", "256", "-q", "2", "-o", dest}
+	cmd := exec.Command(binary, args...)
+	if err := cmd.Run(); err != nil {
+		log.Println("Error:", dest, err)
+		// check(err)
+	}
+	// log.Println("OK:", dest)
 }
 
 func TrackLocationToFilePath(location string) string {
 	pathLike, err := url.QueryUnescape(location)
 	check(err)
 	path := strings.Replace(pathLike, "file://localhost/", "", 1)
-	return path
+	return sanitize.HTML(path)
 }
 
 func CopyFile(fromPath string, toPath string) {
