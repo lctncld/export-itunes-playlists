@@ -22,9 +22,10 @@ func main() {
 	library, err := itl.ReadFromXML(bufio.NewReader(f))
 	check(err)
 
-	CopyPlaylists(library, []string{
+	copyPlaylists(library, []string{
 		// "Machinae Supremacy",
-		"_Pop",
+		// "_Pop",
+		"Chiptune",
 	})
 }
 
@@ -34,27 +35,44 @@ func check(e error) {
 	}
 }
 
-func CopyPlaylists(library itl.Library, playlistsToCopy []string) {
+func copyPlaylists(library itl.Library, playlistsToCopy []string) {
 	tracksByPlaylist := make(map[string][]itl.Track)
 
 	for _, playlist := range library.Playlists {
 		playlistName := playlist.Name
-		if SkipPlaylsit(playlistName) {
+		if skipPlaylsit(playlistName) {
 			continue
 		}
-		tracksByPlaylist[playlistName] = GetTracksForPlaylist(library, playlist)
+		tracksByPlaylist[playlistName] = getTracksForPlaylist(library, playlist)
 		log.Println("Playlist:", playlistName)
 	}
 
+	// var wg sync.WaitGroup
+
 	for _, pl := range playlistsToCopy {
 		tracks := tracksByPlaylist[pl]
+
+		// jobs := make(chan int, 16)
+		// go worker(tracks)
+
 		for _, track := range tracks {
-			CopyTrackToDestination(track)
+			// go func(tr itl.Track) {
+			// wg.Add(1)
+			copyTrackToDestination(track)
+			// wg.Done()
+			// }(track)
 		}
 	}
+	// wg.Wait()
 }
 
-func SkipPlaylsit(playlist string) bool {
+// func worker(jobs <-chan int) {
+// 	for n := range jobs {
+
+// 	}
+// }
+
+func skipPlaylsit(playlist string) bool {
 	excluded := []string{
 		"Library",
 		"Downloaded",
@@ -77,7 +95,7 @@ func SkipPlaylsit(playlist string) bool {
 	return false
 }
 
-func GetTracksForPlaylist(library itl.Library, playlist itl.Playlist) []itl.Track {
+func getTracksForPlaylist(library itl.Library, playlist itl.Playlist) []itl.Track {
 	var tracks []itl.Track
 	for _, item := range playlist.PlaylistItems {
 		track := library.Tracks[strconv.Itoa(item.TrackID)]
@@ -86,8 +104,8 @@ func GetTracksForPlaylist(library itl.Library, playlist itl.Playlist) []itl.Trac
 	return tracks
 }
 
-func CopyTrackToDestination(track itl.Track) {
-	src := TrackLocationToFilePath(track.Location)
+func copyTrackToDestination(track itl.Track) {
+	src := trackLocationToFilePath(track.Location)
 	_, srcFile := filepath.Split(src)
 	destRoot := filepath.Join("D:", "Mc", "files")
 
@@ -100,20 +118,45 @@ func CopyTrackToDestination(track itl.Track) {
 
 	destDir := filepath.Join(
 		destRoot,
-		albumArtistOrAtrist+"-"+track.Album,
+		sanitize.BaseName(albumArtistOrAtrist)+"-"+sanitize.BaseName(track.Album),
 	)
 	err := os.MkdirAll(destDir, os.ModeDir)
 	check(err)
 	dest := filepath.Join(destDir, srcFile)
 	log.Println("Source:", src)
 	log.Println("Destination:", dest)
-	// CopyFile(src, dest)
+
+	if track.Kind == "Apple Lossless audio file" {
+		transcodeFile(src, dest)
+	} else {
+		copyFile(src, dest)
+	}
+}
+
+func trackLocationToFilePath(location string) string {
+	pathLike, err := url.QueryUnescape(location)
+	check(err)
+	path := strings.Replace(pathLike, "file://localhost/", "", 1)
+	out := replace(path)
+	return out
+}
+
+func replace(in string) string {
+	var out string
+	out = strings.Replace(in, "&#38;", "&", -1)
+	return out
+}
+
+func transcodeFile(src, dest string) {
+	log.Println("Transcoding", src, dest)
 
 	binary, lookErr := exec.LookPath("qaac64")
 	check(lookErr)
 
 	args := []string{src, "-v", "256", "-q", "2", "-o", dest}
 	cmd := exec.Command(binary, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		log.Println("Error:", dest, err)
 		// check(err)
@@ -121,14 +164,8 @@ func CopyTrackToDestination(track itl.Track) {
 	// log.Println("OK:", dest)
 }
 
-func TrackLocationToFilePath(location string) string {
-	pathLike, err := url.QueryUnescape(location)
-	check(err)
-	path := strings.Replace(pathLike, "file://localhost/", "", 1)
-	return sanitize.HTML(path)
-}
-
-func CopyFile(fromPath string, toPath string) {
+func copyFile(fromPath string, toPath string) {
+	log.Println("Copying", fromPath, toPath)
 	from, err := os.Open(fromPath)
 	if err != nil {
 		log.Fatal(err)
