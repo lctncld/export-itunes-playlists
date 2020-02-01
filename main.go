@@ -34,15 +34,9 @@ func main() {
 	check(err)
 
 	copyPlaylists(library, []string{
-		// "Machinae Supremacy",
-		// "_Pop",
-		// "Electro (House)",
-		// "FF 2SYNC",
-		"T7S",
-		// "Chiptune",
-		// "On-The-Go 3",
-		// "Playlist 3",
-		// "200104",
+		"Machinae Supremacy",
+		"_Pop",
+		"200104",
 	})
 }
 
